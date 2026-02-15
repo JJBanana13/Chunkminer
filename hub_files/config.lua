@@ -1,4 +1,4 @@
-inf = 1e309
+inf = 999999
 
 ---==[ CHUNKMINE - ATM10 Mining Dimension ]==---
 -- 16 Turtles pro Chunk, jede baut ein 4x4 Quadrat

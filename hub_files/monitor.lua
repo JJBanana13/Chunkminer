@@ -120,13 +120,6 @@ function turtle_viewer(turtle_ids)
                 monitor_location.x = turtle.data.location.x
                 monitor_location.z = turtle.data.location.z
                 monitor_zoom_level = 0
-                for level_index, level_and_chance in pairs(config.mine_levels) do
-                    if turtle.strip and level_and_chance.level == turtle.strip.y then
-                        monitor_level_index = level_index
-                        select_mine_level()
-                        break
-                    end
-                end
                 term.redirect(monitor.restore_to)
                 return
             elseif monitor_touch.x == elements.turtle_forward.x and monitor_touch.y == elements.turtle_forward.y then
@@ -596,77 +589,58 @@ end
     
 
 function draw_monitor()
-    
+
     term.redirect(monitor)
     term.setBackgroundColor(colors.black)
     monitor.clear()
-    
+
     zoom_factor = math.pow(2, monitor_zoom_level)
     min_location = {
         x = monitor_location.x - math.floor(monitor_width  * zoom_factor / 2) - 1,
         z = monitor_location.z - math.floor(monitor_height * zoom_factor / 2) - 1,
     }
-    
-    local mined = {}
-    local xz
-    for x = min_location.x - ((min_location.x - config.locations.mine_enter.x) % config.grid_width), min_location.x + (monitor_width * zoom_factor), config.grid_width do
-        for z = min_location.z, min_location.z + (monitor_height * zoom_factor), zoom_factor do
-            xz = x .. ',' .. z
-            if not mined[xz] then
-                if z > config.locations.mine_enter.z then
-                    if monitor_level[x] and monitor_level[x].south.z > z then
-                        mined[xz] = true
-                        draw_location({x = x, z = z}, colors.lightGray)
-                    else
-                        draw_location({x = x, z = z}, colors.gray)
-                    end
-                else
-                    if monitor_level[x] and monitor_level[x].north.z < z then
-                        mined[xz] = true
-                        draw_location({x = x, z = z}, colors.lightGray)
-                    else
-                        draw_location({x = x, z = z}, colors.gray)
+
+    -- DRAW CHUNK GRID
+    local cs = config.chunk_size or 16
+    local cx_start = math.floor(min_location.x / cs) * cs
+    local cz_start = math.floor(min_location.z / cs) * cs
+    local world_x_end = min_location.x + monitor_width * zoom_factor
+    local world_z_end = min_location.z + monitor_height * zoom_factor
+
+    for cx = cx_start, world_x_end, cs do
+        for cz = cz_start, world_z_end, cs do
+            local key = cx .. '_' .. cz
+            local color
+            if state.current_chunk and state.current_chunk.chunk_x == cx and state.current_chunk.chunk_z == cz then
+                color = colors.lime
+            elseif state.chunks[key] and state.chunks[key].done then
+                color = colors.lightGray
+            elseif state.chunks[key] then
+                color = colors.orange
+            end
+            if color then
+                for x = cx, cx + cs - 1, zoom_factor do
+                    for z = cz, cz + cs - 1, zoom_factor do
+                        draw_location({x = x, z = z}, color)
                     end
                 end
             end
         end
     end
-    
-    for x = min_location.x, min_location.x + (monitor_width * zoom_factor), zoom_factor do
-        if x > monitor_level.main_shaft.west.x and x < monitor_level.main_shaft.east.x then
-            draw_location({x = x, z = config.locations.mine_enter.z}, colors.lightGray)
-        else
-            draw_location({x = x, z = config.locations.mine_enter.z}, colors.gray)
-        end
-    end
-    
+
     local pixel
     local special = {}
-    
+
     pixel = draw_location(config.locations.mine_exit, colors.blue)
     if pixel then
         special[pixel.x .. ',' .. pixel.y] = colors.blue
     end
-    
+
     pixel = draw_location(config.locations.mine_enter, colors.blue)
     if pixel then
         special[pixel.x .. ',' .. pixel.y] = colors.blue
     end
-    
-    -- DRAW STRIP ENDINGS
-    for name, strip in pairs(monitor_level) do
-        if name ~= 'y' then
-            for _, strip_end in pairs(strip) do
-                if strip_end.turtles then
-                    pixel = draw_location(strip_end, colors.green)
-                    if pixel then
-                        special[pixel.x .. ',' .. pixel.y] = colors.green
-                    end
-                end
-            end
-        end
-    end
-    
+
     term.setTextColor(colors.black)
     turtles = {}
     local str_pixel
@@ -700,7 +674,7 @@ function draw_monitor()
             end
         end
     end
-    
+
     for _, pocket in pairs(state.pockets) do
         local location = pocket.data.location
         if location and location.x and location.y then
@@ -717,7 +691,7 @@ function draw_monitor()
             end
         end
     end
-    
+
     term.setTextColor(colors.white)
     term.setBackgroundColor(colors.green)
     term.setCursorPos(elements.menu.x, elements.menu.y)
@@ -736,17 +710,17 @@ function draw_monitor()
     term.write('W')
     term.setCursorPos(elements.right.x, elements.right.y)
     term.write('E')
-    term.setCursorPos(elements.level_up.x, elements.level_up.y)
-    term.write('+')
-    term.setCursorPos(elements.level_down.x, elements.level_down.y)
-    term.write('-')
     term.setCursorPos(elements.zoom_in.x, elements.zoom_in.y)
     term.write('+')
     term.setCursorPos(elements.zoom_out.x, elements.zoom_out.y)
     term.write('-')
     term.setBackgroundColor(colors.brown)
     term.setCursorPos(elements.level_indicator.x, elements.level_indicator.y)
-    term.write(string.format('LEVEL: %3d', monitor_level.y))
+    if state.current_chunk then
+        term.write(string.format('Y:%3d > %2d', state.current_chunk.y_current, config.mine_y_bottom))
+    else
+        term.write(' KEIN CHUNK')
+    end
     term.setCursorPos(elements.zoom_indicator.x, elements.zoom_indicator.y)
     term.write('ZOOM: ' .. monitor_zoom_level)
     term.setCursorPos(elements.x_indicator.x, elements.x_indicator.y)
@@ -761,7 +735,7 @@ function draw_monitor()
     term.write('ALL-')
     term.setCursorPos(elements.mining_indicator.x, elements.mining_indicator.y)
     term.write('MINING-')
-    
+
     term.redirect(monitor.restore_to)
 end
 
@@ -775,12 +749,6 @@ function touch_monitor(monitor_touch)
         monitor_location.x = monitor_location.x - zoom_factor
     elseif monitor_touch.x == elements.right.x and monitor_touch.y == elements.right.y then
         monitor_location.x = monitor_location.x + zoom_factor
-    elseif monitor_touch.x == elements.level_up.x and monitor_touch.y == elements.level_up.y then
-        monitor_level_index = math.min(monitor_level_index + 1, #config.mine_levels)
-        select_mine_level()
-    elseif monitor_touch.x == elements.level_down.x and monitor_touch.y == elements.level_down.y then
-        monitor_level_index = math.max(monitor_level_index - 1, 1)
-        select_mine_level()
     elseif monitor_touch.x == elements.zoom_in.x and monitor_touch.y == elements.zoom_in.y then
         monitor_zoom_level = math.max(monitor_zoom_level - 1, 0)
     elseif monitor_touch.x == elements.zoom_out.x and monitor_touch.y == elements.zoom_out.y then
@@ -873,11 +841,6 @@ function init_elements()
 end
 
 
-function select_mine_level()
-    monitor_level = state.mine[config.mine_levels[monitor_level_index].level]
-end
-
-
 function step()
     while #state.monitor_touches > 0 do
         touch_monitor(table.remove(state.monitor_touches))
@@ -917,13 +880,10 @@ function main()
     
     init_elements()
     
-    while not state.mine do
+    while not state.chunks do
         sleep(0.5)
     end
-    
-    monitor_level_index = 1
-    select_mine_level()
-    
+
     state.monitor_touches = {}
     while true do
         local status, caught_error = pcall(step)

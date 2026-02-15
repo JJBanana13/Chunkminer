@@ -1,4 +1,4 @@
-inf = 1e309
+inf = 999999
 
 bumps = {
     north = { 0,  0, -1},
